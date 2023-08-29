@@ -8,7 +8,7 @@
     "ws2812": {
         "pin": "D3"
     },
-    "rgb_matrix": {
+    "XXXrgb_matrixXXX": {
         "layout": [
             {"x": 85, "y": 16, "flags": 2},
             {"x": 50, "y": 13, "flags": 2},

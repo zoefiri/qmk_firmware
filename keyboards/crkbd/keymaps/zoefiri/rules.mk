@@ -1,0 +1,9 @@
+MOUSEKEY_ENABLE = no     # Mouse keys
+LTO_ENABLE      = yes
+MIDI_ENABLE = yes
+CONSOLE_ENABLE = yes
+BOOTMAGIC_ENABLE = yes
+# RGB_MATRIX_ENABLE = yes
+RGBLIGHT_ENABLE = yes # Enables QMK's RGB code
+WS2812_DRIVER = vendor # Use the RP2040's PIO interface
+# VIA_ENABLE      = yes    # Enable VIA
