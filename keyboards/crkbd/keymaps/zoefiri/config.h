@@ -18,6 +18,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #pragma once
 
+#ifndef CONFIG_H
+#define CONFIG_H
+
 /* Select hand configuration */
 
 #define MASTER_LEFT
@@ -44,10 +47,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #define OLED_FONT_H "keyboards/crkbd/lib/glcdfont.c"
 
-#define WEAR_LEVELING_LOGICAL_SIZE 204800
+#define WEAR_LEVELING_LOGICAL_SIZE 245760
 #define WEAR_LEVELING_BACKING_SIZE WEAR_LEVELING_LOGICAL_SIZE*2
 
-#define EECONFIG_USER_DATA_SIZE 2048
+#define EECONFIG_USER_DATA_SIZE 4000
 
 // #undef WS2812_DI_PIN
 // #define WS2812_DI_PIN 25U
@@ -59,11 +62,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // #define SPLIT_TRANSPORT_MIRROR
 // #define RGB_MATRIX_SPLIT {1, 1}
 
-#undef WS2812_DI_PIN
-#define WS2812_DI_PIN 25
-#undef RGBLED_NUM
-#define RGBLED_NUM 2
-#undef RGBLED_SPLIT
-#define RGBLED_SPLIT {1, 1}
+// #undef WS2812_DI_PIN
+// #define WS2812_DI_PIN 25
+// #undef RGBLED_NUM
+// #define RGBLED_NUM 2
+// #undef RGBLED_SPLIT
+// #define RGBLED_SPLIT {1, 1}
 
 #define SPLIT_TRANSACTION_IDS_USER USER_SYNC_A, USER_SYNC_B, USER_SYNC_C
+
+#endif
