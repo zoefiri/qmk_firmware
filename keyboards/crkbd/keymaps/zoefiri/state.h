@@ -7,16 +7,6 @@
 #    include "enum.h"
 #    include "rgb.h"
 
-typedef struct {
-    int x;
-    int y;
-} xy;
-
-typedef struct {
-    xy* xy;
-    int len;
-} xy_list;
-
 // TODO: this will be superceded by state once
 // user config
 typedef union {
@@ -27,19 +17,6 @@ typedef union {
         uint8_t padding[1964];
     };
 } user_config_t;
-
-// oled_restore_block stores a bitmap block of the display's state prior to beginning to render a header msg
-typedef struct {
-    char** block;
-    xy     dims;
-    xy     pos;
-    int    frame; // <--- this is the frame when the block was saved
-} oled_restore_block;
-
-typedef struct {
-    char** block;
-    dims   dims;
-} oled_block;
 
 typedef struct {
     /* /////////////////
@@ -90,7 +67,7 @@ typedef struct {
     //// oled        ////
     ////////////////// */
     //
-    bool               msg_displaying;
+    bool msg_displaying;
 } state_t;
 
 user_config_t user_config;

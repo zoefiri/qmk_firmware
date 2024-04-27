@@ -2,7 +2,7 @@
 
 #include "oled.h"
 #include "state.h"
-#include "util.h"
+#include "utils.h"
 #include "quantum.h"
 
 char blackRow[] = {

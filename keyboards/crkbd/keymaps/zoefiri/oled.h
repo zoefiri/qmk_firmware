@@ -1,10 +1,25 @@
 #pragma once
 
+#include "utils.h"
+
 #define CHAR_W 20
 #define CHAR_H 12
 
 #define FONT_SHEET_ROWS 384
 #define FONT_SHEET_COLS 6
+
+// oled_restore_block stores a bitmap block of the display's state prior to beginning to render a header msg
+typedef struct {
+    char** block;
+    xy     dims;
+    xy     pos;
+    int    frame; // <--- this is the frame when the block was saved
+} oled_restore_block;
+
+typedef struct {
+    char** block;
+    dims   dims;
+} oled_block;
 
 // font is "Sharp Retro": https://opengameart.org/content/sharp-retro-font
 // each byte is contained by its own array since each byte is actually a whole row in the bitmap
@@ -77,3 +92,4 @@ static const char fontSheet[FONT_SHEET_ROWS][FONT_SHEET_COLS] = {
     {0x00}, {0xc3}, {0xff}, {0xff}, {0x7e}, {0x18},
     {0x38}, {0x38}, {0x18}, {0x38}, {0x30}, {0x38}
 };
+

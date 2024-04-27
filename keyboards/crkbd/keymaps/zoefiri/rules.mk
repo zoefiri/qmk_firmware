@@ -2,6 +2,8 @@ SRC += pgm.c
 SRC += sync.c
 SRC += rgb.c
 SRC += tapdance.c
+SRC += moonscrape.c
+SRC += oled.c
 
 # ergo features
 STENO_ENABLE     = no

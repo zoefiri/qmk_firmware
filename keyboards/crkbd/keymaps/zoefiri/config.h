@@ -76,6 +76,3 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define TAPPING_TERM 170
 
 #endif
-
-#define ARRAY_SIZE(array) \
-    (sizeof(array) / sizeof(*array))
