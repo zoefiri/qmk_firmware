@@ -3,17 +3,25 @@ SRC += sync.c
 SRC += rgb.c
 SRC += tapdance.c
 
-STENO_ENABLE = no
-MOUSEKEY_ENABLE = no     # Mouse keys
-LTO_ENABLE      = yes
-MIDI_ENABLE = no
-CONSOLE_ENABLE = yes
-BOOTMAGIC_ENABLE = yes
-RGB_MATRIX_ENABLE = yes
-RGBLIGHT_ENABLE = no # Enables QMK's RGB code
-SPLIT_KEYBOARD = yes
-WS2812_DRIVER = vendor # Use the RP2040's PIO interface
+# ergo features
+STENO_ENABLE     = no
 TAP_DANCE_ENABLE = yes
-CONVERT_TO = blok
-# VIA_ENABLE      = yes    # Enable VIA
-PRINTF_LIB = $(PRINTF_LIB_FLOAT)
+MOUSEKEY_ENABLE  = no  # Mouse keys
+
+# devtools & etc.
+CONSOLE_ENABLE   = yes
+BOOTMAGIC_ENABLE = yes
+CONVERT_TO       = blok
+PRINTF_LIB       = $(PRINTF_LIB_FLOAT)
+# LTO_ENABLE     = yes # enable this when actually building FW
+
+# RGB
+RGB_MATRIX_ENABLE = yes
+RGBLIGHT_ENABLE   = no     # Enables QMK's RGB code
+WS2812_DRIVER     = vendor # Use the RP2040's PIO interface
+
+# enable split
+SPLIT_KEYBOARD = yes
+
+# fun :D
+MIDI_ENABLE = no
