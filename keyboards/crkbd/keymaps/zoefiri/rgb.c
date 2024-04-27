@@ -3,14 +3,45 @@
 #include "timer.h"
 #include "transactions.h"
 #include "state.h"
+#include "sync.h"
 
-uint16_t last_frame = 0;
+uint32_t last_frame = 0;
+uint32_t last_spawn = 0;
 
 uint16_t rbuff;
 uint16_t gbuff;
 uint16_t bbuff;
 
 uint8_t x = 0;
+
+uint32_t x_step = 0;
+
+int yx_led_map[4][12] = {{18, 17, 12, 11, 4, 3, 24, 25, 32, 33, 38, 39}, {19, 16, 13, 10, 5, 2, 23, 26, 31, 34, 37, 40}, {20, 15, 14, 9, 6, 1, 22, 27, 30, 35, 36, 41}, {-1, -1, -1, 8, 7, 0, 21, 28, 29, -1, -1, -1}};
+
+star_t stars[MAX_STARS];
+
+starfield_t starfield = {.stars = stars, .starcount = 0, .last_despawned = -1};
+
+star_t single_star = {.intensity  = 0.10,
+                      .volatility = 1.0,
+                      .luminance  = 1.0,
+                      .hue        = 255,
+
+                      .x_pos    = 0.0,
+                      .y_pos    = 0.0,
+                      .velocity = 10.0,
+                      .spawned  = 1};
+
+typedef struct {
+    int l;
+    int f;
+} doublerep;
+
+doublerep to_doublerep(double double_arg) {
+    double    partial = (double_arg - (uint32_t)double_arg);
+    doublerep ret     = {.l = (uint32_t)double_arg, .f = (partial)*10000};
+    return ret;
+}
 
 /*!md {{{
 
@@ -33,18 +64,18 @@ uint8_t x = 0;
  * **max:** _rscalable_t_
 
 ### fXY:
-_a simple pair of floats_
- * **x:** _float_
- * **y:** _float_
+_a simple pair of doubles_
+ * **x:** _double_
+ * **y:** _double_
 
 
 # the properties used to define the animation
 
-## Ok so the plan here is that for each "cycle" I decide cycle duration and "intensity", this intensity is randomly distributed across x "stars"
+## Ok so the plan here is that for each "cycle" I decide cycle velocity and "intensity", this intensity is randomly distributed across x "stars"
 ### starsettings_t
  * **starcount:    .** *range_rscalable_t* - dictates count of strars in a cycle
 
- * **duration:     .** *range_rscalable_t* - decided each cycle, this will be lightly randomized likely in a range that bumps as WPM rises.
+ * **velocity:     .** *range_rscalable_t* - decided each cycle, this will be lightly randomized likely in a range that bumps as WPM rises.
 
  * **directionality:** *int* - 1/2/3/4 to progress stars in < / V / ^ / > directions
 
@@ -57,7 +88,7 @@ _a simple pair of floats_
 
  * **volatility: .** *rscalable_t* - factor that determines "sparking" emission effects from a star. This is distributed across all stars in a cycle, the amount
     of volatiles at any given moment is determined by volatility, with more volatiles their strength decreases and speed increases towards the end of the stream.
- * **volatiles:  .**  *fXY[volatility]* - holds a list of float pairs representing current volatile's strength, and when it will end.
+ * **volatiles:  .**  *fXY[volatility]* - holds a list of double pairs representing current volatile's strength, and when it will end.
     * _function:_ the volatile's trajectory is characterized by its index in **volatiles** (scaled) plus the start of the cycle's timestamp modulated over 4.0,
     a volatile's position in its trajectory is determiend by _pos = FXy[volatile].Y - now() / FXy[volatile].Y_ so relative to the x,y of a star's center
     it x-pos for the horizontal position of the volatile and y - √(-pos * trajectory) for the vertical.
@@ -75,7 +106,7 @@ _a simple pair of floats_
 ### starprops_t
  * individual stars:
  * **pos:    .** _int_ - the posititon of this star's origin
- * **duration:** _int_ - the amount of time it takes for this star to traverse the grid
+ * **velocity:** _int_ - the speed at which the star traverses the grid
  * **spawned:.** *int* - the timestamp for when this star was initially spawned
  * **...:    .** _int_ - star contains a prop for each of the star properties in starsettings, they're generated from the random scalable type.
 
@@ -109,30 +140,54 @@ pixels_t render_pixels;
 #define COLR(hexcode) \
     { (0xff0000 & hexcode) / 0x10000, (0x00ff00 & hexcode) / 0x100, 0x0000ff & hexcode }
 
+#define GRID_XY(grid, x, y) grid[yx_led_map[y][x]]
+
 #define SET_COLR(target, hexcode)              \
     target.r = (0xff0000 & hexcode) / 0x10000; \
     target.g = (0x00ff00 & hexcode) / 0x100;   \
     target.b = 0x0000ff & hexcode;
 
-color_t mult_color(color_t color, float mult) {
-    rbuff = color.r * mult;
-    gbuff = color.g * mult;
-    bbuff = color.b * mult;
-    color.r *= rbuff > 0xff ? 0xff : rbuff;
-    color.g *= gbuff > 0xff ? 0xff : gbuff;
-    color.b *= bbuff > 0xff ? 0xff : bbuff;
+color_t white = {COLR(0xffff66)};
+
+color_t mult_color(color_t color, double mult) {
+    rbuff   = color.r * mult;
+    gbuff   = color.g * mult;
+    bbuff   = color.b * mult;
+    color.r = rbuff > 0xff ? 0xff : rbuff;
+    color.g = gbuff > 0xff ? 0xff : gbuff;
+    color.b = bbuff > 0xff ? 0xff : bbuff;
     return color;
 }
 
+void add_to_color(uint8_t color[3], uint8_t color2[3]) {
+    rbuff    = color[0] + color2[0];
+    gbuff    = color[1] + color2[1];
+    bbuff    = color[2] + color2[2];
+    color[0] = rbuff > 0xff ? 0xff : rbuff;
+    color[1] = gbuff > 0xff ? 0xff : gbuff;
+    color[2] = bbuff > 0xff ? 0xff : bbuff;
+}
+
 // alternative to mult_color to directly operate on a color, for very frequent color multiplication where copying colors isn't needed.
-#define MULT_COLOR(color, mult)                 \
-    {                                           \
-        rbuff = color.r * mult;                 \
-        gbuff = color.g * mult;                 \
-        bbuff = color.b * mult;                 \
-        color.r *= rbuff > 0xff ? 0xff : rbuff; \
-        color.g *= gbuff > 0xff ? 0xff : gbuff; \
-        color.b *= bbuff > 0xff ? 0xff : bbuff; \
+#define MULT_COLOR(color, mult)                \
+    {                                          \
+        rbuff   = color.r * mult;              \
+        gbuff   = color.g * mult;              \
+        bbuff   = color.b * mult;              \
+        color.r = rbuff > 0xff ? 0xff : rbuff; \
+        color.g = gbuff > 0xff ? 0xff : gbuff; \
+        color.b = bbuff > 0xff ? 0xff : bbuff; \
+    }
+
+// macro to quickly add together two colors
+#define ADD_COLOR(color, color2)               \
+    {                                          \
+        rbuff   = color.r + color2.r;          \
+        gbuff   = color.g + color2.g;          \
+        bbuff   = color.b + color2.b;          \
+        color.r = rbuff > 0xff ? 0xff : rbuff; \
+        color.g = gbuff > 0xff ? 0xff : gbuff; \
+        color.b = bbuff > 0xff ? 0xff : bbuff; \
     }
 
 #define OR_COLORS(color, or_color) \
@@ -153,34 +208,34 @@ typedef union {
 int next_lumboost;
 
 // this might need to be changed so that we have a "backing" buffer of an extra 12 columns for each row
-// at the moment the concept for this is that it takes the x,y a pixel belongs at and then aliases it across the two physical LEDs according to floating point position it's supposed to be @, so
+// at the moment the concept for this is that it takes the x,y a pixel belongs at and then aliases it across the two physical LEDs according to doubleing point position it's supposed to be @, so
 // presently this is the last thing we call to draw our canvas since beyond this point doing anything but the aliasing stuff will probably fuck with the canvas
-// color_t* position_adjust_color(float position, color_t* color) {
+// color_t* position_adjust_color(double position, color_t* color) {
 //     // intensity on x value corresponding floor of position
-//     float intensity = (int)(position + 1) - position;
+//     double intensity = (int)(position + 1) - position;
 //     MULT_COLOR(color, intensity);
 // }
 
 // this takes a list of pixels at positions with a global offset and renders them to a physically
 // representative gird of RGB vals. Returns a list of the xy it set on
-void render_pixels_to_grid(pixels_t pixels, color_t* phys, int phys_len, float offset) {
-    float x_base;
-    float y_base;
-    float x_nxt;
-    float y_nxt;
+void render_pixels_to_grid(pixels_t pixels, color_t* phys, int phys_len, double offset) {
+    double x_base;
+    double y_base;
+    double x_nxt;
+    double y_nxt;
 
     for (int i = 0; i < pixels.len; i++) {
         // calculate the % strength that aliases into x and/or y +1 and the % that displays at the base x or y
-        float x = ((int)(pixels.pixels[i].pos.x + offset) % 12) + (pixels.pixels[i].pos.x - (int)pixels.pixels[i].pos.x);
+        double x = ((int)(pixels.pixels[i].pos.x + offset) % 12) + (pixels.pixels[i].pos.x - (int)pixels.pixels[i].pos.x);
 
-        float y = pixels.pixels[i].pos.y;
+        double y = pixels.pixels[i].pos.y;
 
         x_nxt  = x - (int)x;
         y_nxt  = y - (int)y;
         x_base = 1 - x_nxt;
         y_base = 1 - y_nxt;
 
-        printf("%d calc'd float params: x: %f, y: \n%f, x_nxt: %f, y_nxt: %f, x_base: %f, y_base: %f\n|\n", i, x, y, x_nxt, y_nxt, x_base, y_base);
+        printf("%d calc'd double params: x: %f, y: \n%f, x_nxt: %f, y_nxt: %f, x_base: %f, y_base: %f\n|\n", i, x, y, x_nxt, y_nxt, x_base, y_base);
 
         // render base pixel, bitwise overlapping the grid,
         // then render onto the following adjacent pixels in (x), (y), and (x,y).
@@ -242,11 +297,11 @@ void clr_previous_frame_xy(color_t frame[12][4]) {
 //     }
 // }
 
-#define SET_XY_COLOR(x, y, color) rgb_matrix_set_color(((*state.yx_led_map)[y][x]), color.r, color.g, color.b)
+#define SET_XY_COLOR(x, y, color) rgb_matrix_set_color(yx_led_map[y][x], color.r, color.g, color.b)
 
-#define ASSIGN_XY_COLOR(x, y, color) rgb_matrix_set_color(((*state.yx_led_map)[y][x]), color.r, color.g, color.b)
+#define ASSIGN_XY_COLOR(x, y, color) rgb_matrix_set_color(yx_led_map[y][x]), color.r, color.g, color.b)
 
-#define RENDER_XY_COLOR_TO_GRID(x, y, color) state.phys_pixels[*state.yx_led_map)[y][x])] = color
+#define RENDER_XY_COLOR_TO_GRID(x, y, color) state.phys_pixels[yx_led_map[y][x])] = color
 
 // void render_grid(pixelsPhys_t pixels, uint8_t led_min, uint8_t led_max) {
 //     for (int i = 0; i < pixels.len; i++) {
@@ -256,97 +311,169 @@ void clr_previous_frame_xy(color_t frame[12][4]) {
 
 // next up: we need to write a function that renders a circle to a x,y of a given size and draws bloom around it.
 
-// int render_star(star_t star, color_t* grid[12][4]) {
-//     uint16_t now = timer_read();
-//     // probably do smth special if we're @ duration..
-//     float x = ((now % star.duration) / (float)star.duration) * 12.0;
-//     int   y = star.pos;
-//
-//     // calculate bloom
-//     color_t white = COLR(0xffffff);
-//     // star center
-//     grid[(int)x][y] = position_adjust_color(mult_color(white, 0.9), x);
-//     // star "head"
-//     grid[x + 1][y] = mult_color(white, 0.5);
-//     // star sidetrails
-//     grid[x][y - 1] = mult_color(white, 0.3) color[x][y + 1] = mult_color(white, 0.3);
-//     // star "head" sides
-//     grid[x + 1][y - 1] = mult_color(white, 0.3) color[x + 1][y + 1] = mult_color(white, 0.3);
-//     // star trail sides
-//     grid[x - 1][y - 1] = mult_color(white, 0.2) color[x - 1][y + 1] = mult_color(white, 0.2) color[x - 2][y - 1] = mult_color(white, 0.09) color[x - 2][y + 1] = mult_color(white, 0.09);
-//     // star trail
-//     grid[x - 1][y] = mult_color(white, 0.3) color[x - 2][y] = mult_color(white, 0.2) color[x - 3][y] = mult_color(white, 0.1) color[x - 4][y] = mult_color(white, 0.05);
-// }
+void draw_pixel_aliased(double x, double y, color_t pixel, color_t grid[48]) {
+    int x_int = x;
+    int y_int = y;
+
+    double overflow_x = x - x_int;
+    double overflow_y = y - y_int;
+    double base_x     = 1 - overflow_x;
+    double base_y     = 1 - overflow_y;
+
+    // color_t base_color = mult_color(pixel, (base_x + base_y)/2.0);
+
+    // base
+    add_to_color(GRID_XY(grid, x_int, y_int).color, mult_color(pixel, (base_x + base_y) / 2.0).color);
+
+    // x overflow
+    add_to_color(GRID_XY(grid, x_int + 1, y_int).color, mult_color(pixel, (overflow_x + base_y) / 2.0).color);
+
+    // y overflow
+    // add_to_color(GRID_XY(grid, x_int, y_int + 1).color, mult_color(pixel, (base_x + overflow_y) / 2.0).color);
+
+    //
+    // // xy overflow
+    // ADD_COLOR(GRID_XY(grid, x_int + 1, y_int + 1), mult_color(pixel, (overflow_x + overflow_y) / 2.0));
+    // tmp            = mult_color(pixel, (overflow_x + overflow_y) / 2.0);
+    // doublerep_prnt = to_doublerep((overflow_x + overflow_y)/2.0);
+    // uprintf("<%d.%04d> 0x%02x:%02x:%02x\n\n", doublerep_prnt.l, doublerep_prnt.f, tmp.r, tmp.g, tmp.b);
+}
+
+void render_particle(double x, double y, double radius, double bloom, double brightness, color_t grid[48]) {
+    color_t base   = mult_color(white, brightness);
+    color_t trails = mult_color(base, bloom);
+    // color_t verts  = mult_color(trails, 0.10);
+
+    // draw center of particle
+    draw_pixel_aliased(x, y, base, grid);
+
+    bool u_contacting = false;
+    bool b_contacting = false;
+    bool l_contacting = false;
+    // bool ll_contacting = false;
+    // bool r_contacting = false;
+
+    // contacting upper edge
+    if (y == 0) {
+        u_contacting = true;
+    } else if (y == 12 - 1) {
+        // if it wasn't contacting the upper edge, check if it was contacting the bottom edge
+        b_contacting = true;
+    }
+
+    // contacting left edge
+    if (x == 0) {
+        l_contacting = true;
+    } else if (x == 1) {
+        // ll_contacting = true;
+    }
+    // else if (x == 12-1) {
+    //     // if it wasn't contacting the left edge, check if it was contacting the right edge
+    //     r_contacting = true;
+    // }
+
+    // draw upper
+    if (!u_contacting) {
+        // draw_pixel_aliased(x, y - 1, verts, grid);
+        // // draw upper_r
+        // if(!r_contacting) {
+        //     ADD_COLOR(GRID_XY(grid, x+1, y-1), corners);
+        // }
+    }
+
+    // draw bottom
+    if (!b_contacting) {
+        // draw_pixel_aliased(x, y + 1, verts, grid);
+        // // draw upper_r
+        // if(!r_contacting) {
+        //     ADD_COLOR(GRID_XY(grid, x+1, y+1), corners);
+        // }
+    }
+
+    // draw left
+    if (!l_contacting) {
+        draw_pixel_aliased(x - 1, y, trails, grid);
+
+        // // draw further left
+        // if (!ll_contacting) {
+        //     draw_pixel_aliased(x - 2, y, trails, grid);
+        // }
+    }
+
+    // // draw right
+    // if (!r_contacting) {
+    //     ADD_COLOR(GRID_XY(grid, x+1, y), sides);
+    // }
+}
+
+void render_star(star_t star, color_t grid[48]) {
+    // uprintf("rendering star particle @ x %d.%d", xpos.l , xpos.f);
+    render_particle(star.x_pos, star.y_pos, 1.0, star.intensity, star.luminance, grid);
+}
 
 bool rgb_matrix_indicators_advanced_user(uint8_t led_min, uint8_t led_max) {
-    // if(timer_elapsed32(last_frame) > 500) {
-    //     // do stuff
-    //     x = rand()%9;
-    // }
-
-    // if (timer_elapsed(last_frame) > 10) {
-    //     if (led_min == 0) {
-    //         state.rgbTicker = (state.rgbTicker + 1) % 252;
-    //
-    //         if (state.rgbTicker == 1) {
-    //             render_pixels.len    = 1;
-    //             render_pixels.pixels = malloc(sizeof(pixel_t) * render_pixels.len);
-    //
-    //             color_t test;
-    //             SET_COLR(test, 0xffff00);
-    //             printf("coltest %d %d %d\n", test.r, test.g, test.b);
-    //
-    //             SET_COLR(render_pixels.pixels[0].color, 0xffff00);
-    //             render_pixels.pixels[0].pos.x = 0.0;
-    //             render_pixels.pixels[0].pos.y = 0.0;
-    //         }
-    //
-    //         clr_previous_frame(state.phys_pixels);
-    //         render_pixels_to_grid(render_pixels, state.phys_pixels, PHYS_PIXELS_COUNT, state.rgbTicker / 12.0);
-    //     }
-
-    if(timer_elapsed32(last_frame) < 500) {
-        return true;
-    }
+    // if starting this render cycle & this is the main board, for each star that is spawned move its position by:
+    // velocity * x_step / FADE_ACCURACY
+    // after this if a star's position is >= 12.0 (has reached end of board) despawn it, otherwise render.
     if (led_min == 0 && !state.isSister) {
         clr_previous_frame(state.phys_pixels);
-        for (int i=0; i < 48; i++) {
-            int i_scale = i + 1;
-            color_t color;
-            color.r       = 12.70 * abs(i_scale - 21);
-            color.g       = i_scale;
-            color.b       = 12.70 * (-22 + i_scale);
 
-            color.r       = i < 20 ? color.r : 0;
-            color.g       = i < 20 ? color.g * (i) : color.g * (41 - i);
-            color.b       = i > 20 ? color.b : 0;
+        for (int i = 0; i < MAX_STARS; i++) {
+            if (timer_elapsed32(last_frame) > 50 || starfield.stars[i].spawned) {
+                //                                              ,|' runs from 0-12.0 in intervals of 1/(12*FADE_ACCURACY)
+                //                                              '-----------,
+                //                                                          :----------------------,
+                starfield.stars[i].x_pos = (starfield.stars[i].velocity) * (x_step % (FADE_ACCURACY * 12)) / (float)FADE_ACCURACY;
+                uprintf("star %d x_pos now @: %d.%d from x_step %ld\n", i, to_doublerep(starfield.stars[i].x_pos).l, to_doublerep(starfield.stars[i].x_pos).f, x_step);
+                if (starfield.stars[i].x_pos >= 12.0) {
+                    uprintf("despawning star %d!\n", i);
+                    starfield.stars[i].spawned = false;
+                    starfield.starcount--;
+                } else {
+                    render_star(starfield.stars[i], state.phys_pixels);
+                }
+            }
+        }
 
-            state.phys_pixels[(*state.yx_led_map)[i/12][i%12]] = color;
+        sync_boards(&state);
+    }
+
+    // render colors on each key from state.phys_pixels grid
+    for (uint8_t i = led_min; i < led_max; i++) {
+        if (!(i == 8 || i == 7 || i == 0 || i == 21 || i == 28 || i == 29)) {
+            RGB_MATRIX_INDICATOR_SET_COLOR(i, state.phys_pixels[i].r, state.phys_pixels[i].g, state.phys_pixels[i].b);
         }
     }
-    for (uint8_t i = led_min; i < led_max; i++) {
-        // printf("min: %d   max: %d\n", led_min, led_max);
-        // printf("RGB_MATRIX_INDICATOR_SET_COLOR(%d, %d, %d, %d)\n", i, state.phys_pixels[i].r, state.phys_pixels[i].g, state.phys_pixels[i].b);
-        // RGB_MATRIX_INDICATOR_SET_COLOR(i, state.phys_pixels[i].r, state.phys_pixels[i].g, state.phys_pixels[i].b);
-        // printf("would have set led %d (%d, %d) = %d to #%x.%x.%x ::: %d %d %d %d - %d %d %d %d - %d %d %d %d - %d %d %d %d :::::: %d\n", i, i%6, i/6, (*state.yx_led_map)[i/12][i%12], color.r, color.g, color.b,
-        //         ((*state.yx_led_map)[0][0]), ((*state.yx_led_map)[0][1]), ((*state.yx_led_map)[0][2]), ((*state.yx_led_map)[0][3]),
-        //         ((*state.yx_led_map)[1][0]), ((*state.yx_led_map)[1][1]), ((*state.yx_led_map)[1][2]), ((*state.yx_led_map)[1][3]),
-        //         ((*state.yx_led_map)[2][0]), ((*state.yx_led_map)[2][1]), ((*state.yx_led_map)[2][2]), ((*state.yx_led_map)[2][3]),
-        //         ((*state.yx_led_map)[3][0]), ((*state.yx_led_map)[3][1]), ((*state.yx_led_map)[3][2]), ((*state.yx_led_map)[3][3]),
-        //         state.isSister
-        //       );
 
-        color_t color = state.phys_pixels[i];
-        rgb_matrix_set_color(i, color.r, color.g, color.b);
+    // if this is the main board and enough time has passed
+    if (timer_elapsed32(last_frame) > 50 && !state.isSister) {
+        x_step = x_step + 1;
+        uprintf("x_step: %ld :: MAX_STARS: %d, starcount: %d\n", x_step, MAX_STARS, starfield.starcount);
+        last_frame = timer_read32();
+
+        // spawn new or init stars if necessary
+        if (starfield.starcount < MAX_STARS) {
+            uprintf("less than %d MAX_STARS! spawning some more.\n", MAX_STARS);
+            for (int i = 0; i < MAX_STARS; i++) {
+                if (!starfield.stars[i].spawned && timer_elapsed32(last_spawn) > 20000) {
+                    uprintf("spawning star %d...\n", i);
+                    last_spawn = timer_read32();
+                    star_t new_star    = {.intensity  = 0.10,
+                                          .volatility = 1.0,
+                                          .luminance  = 1.0,
+                                          .hue        = 255,
+
+                                          .x_pos    = 0.0,
+                                          .y_pos    = (rand() % (4 * 3)) / 3.0,
+                                          .velocity = ((rand() % (1 * 20)) + 10.0) / 20.0,
+                                          .spawned  = true};
+                    starfield.stars[i] = new_star;
+                    starfield.starcount++;
+                }
+            }
+        }
     }
-
-
-    // }
-    // if (state.rgbTicker == 251) {
-    //     state.y_state = (state.y_state + 1) % 4;
-    // }
-    last_frame = timer_read32();
-    return false;
+    return true;
 }
 
 // void set_rgb_state(state_t* state) {
@@ -387,19 +514,6 @@ bool rgb_matrix_indicators_advanced_user(uint8_t led_min, uint8_t led_max) {
 //         break;
 // }
 // }
-
-led_config_t g_led_config = {{{18, 17, 12, 11, 4, 3},
-                              {19, 16, 13, 10, 5, 2},
-                              {20, 15, 14, 9, 6, 1},
-                              {NO_LED, NO_LED, NO_LED, 8, 7, 0},
-
-                              {39, 38, 33, 32, 25, 24},
-                              {40, 37, 34, 31, 26, 23},
-                              {41, 36, 35, 30, 27, 22},
-                              {NO_LED, NO_LED, NO_LED, 29, 28, 21}},
-                             {{95, 63}, {85, 39}, {85, 21}, {85, 4}, {68, 2}, {68, 19}, {68, 37}, {80, 58}, {60, 55}, {50, 35}, {50, 13}, {50, 0}, {33, 3}, {33, 20}, {33, 37}, {16, 42}, {16, 24}, {16, 7}, {0, 7}, {0, 24}, {0, 41}, {129, 63}, {139, 39}, {139, 21}, {139, 4}, {156, 2}, {156, 19}, {156, 37}, {144, 58}, {164, 55}, {174, 35}, {174, 13}, {174, 0}, {191, 3}, {191, 20}, {191, 37}, {208, 42}, {208, 24}, {208, 7}, {224, 7}, {224, 24}, {224, 41}},
-                             {4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4}};
-
 
 // // commented to preserve fmt
 // led_config_t g_led_config = {

@@ -1,9 +1,17 @@
 #pragma once
 
 #ifndef RGB_H
-#define RGB_H
+#    define RGB_H
 
-#include "state.h"
+#    include "state.h"
+
+#    define PHYS_PIXELS_COUNT 48
+
+#    define FADE_ACCURACY 16
+
+#    define MAX_STARS 5
+
+#    define TICK_RATE 75
 
 typedef enum { ASCEND, DESCEND, CENTERED } rscale_direction_t;
 
@@ -29,20 +37,28 @@ typedef struct {
 // star props
 //
 typedef struct {
-    float x;
-    float y;
-} xy_float;
+    double x;
+    double y;
+} xy_double;
 
 typedef struct {
-    int intensity;
-    int volatility;
-    int luminance;
-    int hue;
+    double intensity;
+    double volatility;
+    double luminance;
+    int    hue;
 
-    int pos;
-    int duration;
-    int spawned;
+    double x_pos;
+    double y_pos;
+
+    double velocity;
+    bool    spawned;
 } star_t;
+
+typedef struct {
+    int     starcount;
+    int     last_despawned;
+    star_t *stars;
+} starfield_t;
 
 // rgb color shit
 //
@@ -56,15 +72,13 @@ typedef union {
 } color_t;
 
 typedef struct {
-    color_t  color;
-    xy_float pos;
+    color_t   color;
+    xy_double pos;
 } pixel_t;
 
 typedef struct {
-    pixel_t* pixels;
+    pixel_t *pixels;
     int      len;
 } pixels_t;
-
-#define PHYS_PIXELS_COUNT 48
 
 #endif

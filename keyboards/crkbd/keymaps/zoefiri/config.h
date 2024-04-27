@@ -58,9 +58,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // #undef RGB_MATRIX_LED_COUNT
 // #define RGB_MATRIX_LED_COUNT 2
 // #define RGB_MATRIX_LED_PROCESS_LIMIT 2
-// #undef RGB_MATRIX_SPLIT
 // #define SPLIT_TRANSPORT_MIRROR
-// #define RGB_MATRIX_SPLIT {1, 1}
+#undef RGB_MATRIX_SPLIT
+#define RGB_MATRIX_SPLIT {21, 21}
 
 // #undef WS2812_DI_PIN
 // #define WS2812_DI_PIN 25
@@ -71,4 +71,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #define SPLIT_TRANSACTION_IDS_USER USER_SYNC_A, USER_SYNC_B, USER_SYNC_C
 
+#define RPC_M2S_BUFFER_SIZE 200
+
+#define TAPPING_TERM 170
+
 #endif
+
+#define ARRAY_SIZE(array) \
+    (sizeof(array) / sizeof(*array))

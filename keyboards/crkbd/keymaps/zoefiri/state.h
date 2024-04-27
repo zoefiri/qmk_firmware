@@ -1,11 +1,11 @@
 #pragma once
 
 #ifndef STATE_H
-#define STATE_H
+#    define STATE_H
 
-#include <stdio.h>
-#include "enum.h"
-#include "rgb.h"
+#    include <stdio.h>
+#    include "enum.h"
+#    include "rgb.h"
 
 typedef struct {
     int x;
@@ -27,6 +27,19 @@ typedef union {
         uint8_t padding[1964];
     };
 } user_config_t;
+
+// oled_restore_block stores a bitmap block of the display's state prior to beginning to render a header msg
+typedef struct {
+    char** block;
+    xy     dims;
+    xy     pos;
+    int    frame; // <--- this is the frame when the block was saved
+} oled_restore_block;
+
+typedef struct {
+    char** block;
+    dims   dims;
+} oled_block;
 
 typedef struct {
     /* /////////////////
@@ -57,13 +70,27 @@ typedef struct {
     //// rgb state   ////
     ////////////////// */
     //
-    uint8_t  rgbTicker;
-    uint8_t  y_state;
-    int*     last_frame_enabled;
+    uint8_t rgbTicker;
+    uint8_t y_state;
+    int*    last_frame_enabled;
     //
-    color_t  phys_pixels[PHYS_PIXELS_COUNT];
+    color_t phys_pixels[PHYS_PIXELS_COUNT];
+
+    /* //////////////////
+    //// debug       ////
+    ////////////////// */
     //
-    int      (*yx_led_map)[4][6];
+    char* oled_msg_main;
+    bool  oled_msg_main_set;
+    char* oled_msg_sister;
+    bool  oled_msg_sister_set;
+    char* randmsg;
+
+    /* //////////////////
+    //// oled        ////
+    ////////////////// */
+    //
+    bool               msg_displaying;
 } state_t;
 
 user_config_t user_config;
@@ -77,22 +104,21 @@ uint32_t last_sync;
 
 // econfig data locations
 
-
 /* /////////////////
 //// pgm mode   ////
 ///////////////// */
 //
 // util
-#define EESTATE_START EECONFIG_USER_DATABLOCK // start of eestate block
-#define EESTATE_UTIL_SIZE 512 // provisioning 512 bytes for this, for futureproofing purposes mostly
+#    define EESTATE_START EECONFIG_USER_DATABLOCK // start of eestate block
+#    define EESTATE_UTIL_SIZE 512                 // provisioning 512 bytes for this, for futureproofing purposes mostly
 //
 // dynamic keymaps
-#define EESTATE_KEYMAP_START EESTATE_START + EESTATE_UTIL_SIZE // start of dynam kmap data
-#define EESTATE_KEYMAP_COUNT 40 // number of dynam kmap
-#define EESTATE_KEYCOUNT 42 // count of keys in dynam kmap
-#define EESTATE_META_SIZE 128 // 128 byte provisioned for metadata
-#define EESTATE_KEYMAP_SIZE sizeof(uint16_t) * EESTATE_KEYCOUNT; // size of one dynam kmap
-#define EESTATE_KEYMAP_FULLSIZE EESTATE_KEYMAP_SIZE + EESTATE_META_SIZE; // size of one dynam kmap with its metadata
-#define EESTATE_KEYMAPS_SIZE EESTATE_KEYMAP_FULLSIZE * EESTATE_KEYMAP_COUNT  // size of dynam kmap region
+#    define EESTATE_KEYMAP_START EESTATE_START + EESTATE_UTIL_SIZE             // start of dynam kmap data
+#    define EESTATE_KEYMAP_COUNT 40                                            // number of dynam kmap
+#    define EESTATE_KEYCOUNT 42                                                // count of keys in dynam kmap
+#    define EESTATE_META_SIZE 128                                              // 128 byte provisioned for metadata
+#    define EESTATE_KEYMAP_SIZE sizeof(uint16_t) * EESTATE_KEYCOUNT;           // size of one dynam kmap
+#    define EESTATE_KEYMAP_FULLSIZE EESTATE_KEYMAP_SIZE + EESTATE_META_SIZE;   // size of one dynam kmap with its metadata
+#    define EESTATE_KEYMAPS_SIZE EESTATE_KEYMAP_FULLSIZE* EESTATE_KEYMAP_COUNT // size of dynam kmap region
 
 #endif

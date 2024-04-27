@@ -2,6 +2,7 @@
 #include <stdlib.h>
 
 #include "state.h"
+#include "config.h"
 
 #include "transactions.h"
 
@@ -18,8 +19,10 @@ void sync_boards(state_t *state) {
 
         // Perform the sync if requested
         if (needs_sync) {
-            if (transaction_rpc_send(USER_SYNC_A, sizeof(*state), &state)) {
+            if (transaction_rpc_send(USER_SYNC_A, sizeof(*state), state)) {
                 last_sync = timer_read32();
+            } else {
+                uprintf("sync error!\n");
             }
         }
     }
